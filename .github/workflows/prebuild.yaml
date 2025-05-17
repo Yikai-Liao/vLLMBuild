@@ -33,6 +33,10 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Clone vLLM repository
+        run: |
+          git clone --depth 1 https://github.com/vllm-project/vllm.git
+
       - name: Create virtual environment with uv
         run: |
           uv venv --python 3.12 --seed
@@ -42,22 +46,16 @@ jobs:
         run: |
           source .venv/bin/activate
           uv pip install "cmake>=3.26" wheel packaging ninja "setuptools-scm>=8" numpy
-          uv pip install -v -r requirements/cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
-
-      - name: Clone vLLM repository
-        run: |
-          git clone https://github.com/vllm-project/vllm.git
-          cd vllm
 
       - name: Build vLLM wheel
         run: |
           source .venv/bin/activate
           cd vllm
-          sed -i '/^torch/d' requirements-build.txt
+          sed -i '/^torch/d' requirements/build.txt
           pip install -v \
             --extra-index-url https://download.pytorch.org/whl/cpu \
-            -r requirements-build.txt \
-            -r requirements-cpu.txt
+            -r requirements/build.txt \
+            -r requirements/cpu.txt
           export VLLM_TARGET_DEVICE=cpu
           python setup.py bdist_wheel
 
