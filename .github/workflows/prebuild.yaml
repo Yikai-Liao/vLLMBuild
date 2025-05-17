@@ -1,0 +1,69 @@
+name: Build vLLM CPU Wheel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-vllm-cpu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-12 g++-12 libnuma-dev libtcmalloc-minimal4 python3-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 10 --slave /usr/bin/g++ g++ /usr/bin/g++-12
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Create virtual environment with uv
+        run: |
+          uv venv --python 3.12 --seed
+          source .venv/bin/activate
+
+      - name: Install Python dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install "cmake>=3.26" wheel packaging ninja "setuptools-scm>=8" numpy
+          uv pip install -v -r requirements/cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Clone vLLM repository
+        run: |
+          git clone https://github.com/vllm-project/vllm.git
+          cd vllm
+
+      - name: Build vLLM wheel
+        run: |
+          source .venv/bin/activate
+          cd vllm
+          sed -i '/^torch/d' requirements-build.txt
+          pip install -v \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            -r requirements-build.txt \
+            -r requirements-cpu.txt
+          export VLLM_TARGET_DEVICE=cpu
+          python setup.py bdist_wheel
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vllm-cpu-wheel
+          path: vllm/dist/*.whl
+          retention-days: 7
